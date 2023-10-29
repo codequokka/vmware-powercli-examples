@@ -11,3 +11,7 @@ PS > Get-Module VMware.PowerCLI -ListAvailable
 PS > Set-PowerCLIConfiguration -Scope User -ParticipateInCEIP $false
 PS > Set-PowerCLIConfiguration -InvalidCertificateAction Ignore
 ```
+
+```
+$ /usr/bin/pwsh ./get_alerts.ps1 <vCenter IP address> <vCenter user> <vCenter password> <targetType>
+```

@@ -1,10 +1,13 @@
-#!/usr/bin/pwsh
-
 param(
-    [parameter(mandatory = $true)][string]$Server,
-    [parameter(mandatory = $true)][string]$User,
-    [parameter(mandatory = $true)][string]$Password,
-    [parameter(mandatory = $true)][string]$Datacenter
+    [parameter(mandatory = $true)]
+    [string]$Server,
+    [parameter(mandatory = $true)]
+    [string]$User,
+    [parameter(mandatory = $true)]
+    [string]$Password,
+    [parameter(mandatory = $true)]
+    [ValidateSet("Vcenter", "Datacenter", "VMHost", "VM", "Datastore")]
+    [string]$targetType
 )
 
 function Connect-Vcenter() {
@@ -15,24 +18,43 @@ function Connect-Vcenter() {
     )
     Connect-VIServer -Server $Server -User $User -Password $Password
 }
+function Get-Entities {
+    param (
+        [parameter(mandatory = $true)]
+        [ValidateSet("Vcenter", "Datacenter", "VMHost", "VM", "Datastore")]
+        [string]$targetType
+    )
+
+    switch ($targetType) {
+        'vCenter' { $entities = Get-Folder -Name "Datacenters" }
+        'Datacenter' { $entities = Get-Datacenter }
+        'VMHost' { $entities = Get-VMHost }
+        'VM' { $entities = Get-VM }
+        'Datastore' { $entities = Get-Datastore }
+        default { $entities = $null }
+    }
+
+    return $entities
+}
+
 
 function Get-AllTriggeredAlarm {
     param (
-        [string]$Datacenter
+        [Object]$entity
     )
-    $alarmOutput = @()
 
-    $entity = Get-Folder -Name $Datacenter
+    $alarmOutput = @()
 
     if ($entity.ExtensionData.TriggeredAlarmState -ne "") {
         foreach ($alarm in $entity.ExtensionData.TriggeredAlarmState) {
-            $tempObj = "" | Select-Object -Property Alarm, Entity, EntityMoRef, AlarmStatus, Time, AlarmMoRef
-            $tempObj.Entity = Get-View $alarm.Entity | Select-Object -ExpandProperty Name
-            $tempObj.Alarm = Get-View $alarm.Alarm | Select-Object -ExpandProperty Info | Select-Object -ExpandProperty Name
-            $tempObj.AlarmStatus = $alarm.OverallStatus
-            $tempObj.AlarmMoRef = $alarm.Alarm
-            $tempObj.EntityMoRef = $alarm.Entity
-            $tempObj.Time = $alarm.Time
+            $tempObj = "" | Select-Object -Property AlarmName, Object, ObjectType, Severity, TriggeredTime, AcknowledgedTime, AcknowledgedBy
+            $tempObj.AlarmName = Get-View $alarm.Alarm | Select-Object -ExpandProperty Info | Select-Object -ExpandProperty Name
+            $tempObj.Object = Get-View $alarm.Entity | Select-Object -ExpandProperty Name
+            $tempObj.ObjectType = $alarm.Entity.Type
+            $tempObj.Severity = $alarm.OverallStatus
+            $tempObj.TriggeredTime = $alarm.Time
+            $tempObj.AcknowledgedTime = $alarm.AcknowledgedTime
+            $tempObj.AcknowledgedBy = $alarm.AcknowledgedByUser
             $alarmOutput += $tempObj
         }
     }
@@ -41,5 +63,7 @@ function Get-AllTriggeredAlarm {
 }
 
 Connect-Vcenter $Server $User $Password
-$triggerdAlarmas = Get-AllTriggeredAlarm $Datacenter
-$triggerdAlarmas | Format-Table -AutoSize
+$entities = Get-Entities $targetType
+foreach ($entity in $entities) {
+    Get-AllTriggeredAlarm $entity | Format-Table -AutoSize
+}
